@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MAC Address Assignment</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Unassigned MAC Addresses</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>MAC Address</th>
+                </tr>
+            </thead>
+            <tbody id="unassigned-table-body"></tbody>
+        </table>
+
+        <h1>Assigned Bays</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>MAC Address</th>
+                    <th>Bay Number</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="assigned-table-body"></tbody>
+        </table>
+    </div>
+
+    <script>
+        function createRow(entry, tableBody) {
+            const row = document.createElement("tr");
+
+            const macAddressCell = document.createElement("td");
+            macAddressCell.innerText = entry.mac_address;
+            row.appendChild(macAddressCell);
+
+            if (entry.bay_number) {
+                const bayNumberCell = document.createElement("td");
+                bayNumberCell.innerText = entry.bay_number;
+                row.appendChild(bayNumberCell);
+
+                const statusCell = document.createElement("td");
+                statusCell.innerText = entry.status;
+                row.appendChild(statusCell);
+            } else {
+                const assignCell = document.createElement("td");
+                const assignButton = document.createElement("button");
+                assignButton.innerText = "Assign";
+                assignButton.addEventListener("click", () => assignBay(entry));
+                assignCell.appendChild(assignButton);
+                row.appendChild(assignCell);
+            }
+
+            tableBody.appendChild(row);
+        }
+
+        async function updateTables() {
+            const unassignedTableBody = document.getElementById("unassigned-table-body");
+            const assignedTableBody = document.getElementById("assigned-table-body");
+
+            unassignedTableBody.innerHTML = "";
+            assignedTableBody.innerHTML = "";
+
+            const unassignedResponse = await axios.get("/api/unassigned-mac-addresses");
+            const unassignedMacAddresses = unassignedResponse.data;
+            unassignedMacAddresses.forEach(entry => createRow(entry, unassignedTableBody));
+
+            const assignedResponse = await axios.get("/api/assigned-mac-addresses");
+            const assignedMacAddresses = assignedResponse.data;
+            assignedMacAddresses.forEach(entry => createRow(entry, assignedTableBody));
+        }
+
+        async function assignBay(entry) {
+            const bayNumber = prompt("Enter the bay number:");
+
+            if (bayNumber) {
+                const response = await axios.post("/api/assign-bay", {
+                    mac_address: entry.mac_address,
+                    bay_number: bayNumber
+                });
+
+                if (response.data.success) {
+                    updateTables();
+                } else {
+                    alert("Failed to assign bay number.");
+                }
+            }
+        }
+
+        updateTables();
+
+        const mqttClient = new Paho.MQTT.Client("broker.example.com", 8000, "web-client");
+
+        mqttClient.onMessageArrived = function (message) {
+            const payload = JSON.parse(message.payloadString);
+
+            axios.post("/api/mqtt-message", payload)
+                .then(response => {
+                    if (response.data.success) {
+                        updateTables();
+                    } else {
+                        alert("Failed to process MQTT message.");
+                    }
+                })
+                .catch(error => {
+                    console.error(error);
+                    alert("An error occurred while processing the MQTT message.");
+                });
+        };
+
+        mqttClient.connect({
+            onSuccess: function () {
+                mqttClient.subscribe("mac_addresses");
+            }
+        });
+    </script>
+</body>
+</html>
