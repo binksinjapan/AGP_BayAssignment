@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MAC Address Assignment</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Table One</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>MAC Address</th>
+                </tr>
+            </thead>
+            <tbody id="table-one-body"></tbody>
+        </table>
+
+        <h1>Table Two</h1>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>MAC Address</th>
+                    <th>Bay Number</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="table-two-body"></tbody>
+        </table>
+
+        <h1>Assign Bay Number</h1>
+        <form id="assign-form">
+            <div class="mb-3">
+                <label for="mac-address-input" class="form-label">MAC Address:</label>
+                <input type="text" class="form-control" id="mac-address-input" required>
+            </div>
+            <div class="mb-3">
+                <label for="bay-number-input" class="form-label">Bay Number:</label>
+                <input type="number" class="form-control" id="bay-number-input" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Assign</button>
+        </form>
+    </div>
+
+    <script>
+        const client = mqtt.connect('ws://broker.example.com:8083/mqtt');
+
+        function createRow(entry, tableBody) {
+            const row = document.createElement('tr');
+
+            const macAddressCell = document.createElement('td');
+            macAddressCell.innerText = entry.mac_address;
+            row.appendChild(macAddressCell);
+
+            if (entry.bay_number) {
+                const bayNumberCell = document.createElement('td');
+                bayNumberCell.innerText = entry.bay_number;
+                row.appendChild(bayNumberCell);
+
+                const statusCell = document.createElement('td');
+                statusCell.innerText = entry.status;
+                row.appendChild(statusCell);
+            }
+
+            tableBody.appendChild(row);
+        }
+
+        function updateTableOne() {
+            const tableOneBody = document.getElementById('table-one-body');
+            tableOneBody.innerHTML = '';
+
+            axios.get('/api/table-one')
+                .then(response => {
+                    const tableOneData = response.data;
+                    tableOneData.forEach(entry => createRow({ mac_address: entry }, tableOneBody));
+                })
+                .catch(error => console.error(error));
+        }
+
+        function updateTableTwo() {
+            const tableTwoBody = document.getElementById('table-two-body');
+            tableTwoBody.innerHTML = '';
+
+            axios.get('/api/table-two')
+                .then(response => {
+                    const tableTwoData = response.data;
+                    tableTwoData.forEach(entry => createRow(entry, tableTwoBody));
+                })
+                .catch(error => console.error(error));
+        }
+
+        function assignBay(event) {
+            event.preventDefault();
+
+            const macAddressInput = document.getElementById('mac-address-input');
+            const bayNumberInput = document.getElementById('bay-number-input');
+
+            const macAddress = macAddressInput.value.trim();
+            const bayNumber = bayNumberInput.value.trim();
+
+            if (macAddress && bayNumber) {
+                axios.post('/api/assign-number', { mac_address: macAddress, bay_number: bayNumber })
+                    .then(response => {
+                        if (response.data.success) {
+                            macAddressInput.value = '';
+                            bayNumberInput.value = '';
+                        } else {
+                            alert('Failed to assign bay number.');
+                        }
+                    })
+                    .catch(error => console.error(error));
+            }
+        }
+
+        client.on('connect', () => {
+            console.log('Connected to MQTT broker.');
+
+            client.subscribe('table_one_update');
+            client.subscribe('table_two_update');
+        });
+
+        client.on('message', (topic, message) => {
+            if (topic === 'table_one_update') {
+                updateTableOne();
+            } else if (topic === 'table_two_update') {
+                const [macAddress, bayNumber] = message.toString().split(':');
+                updateTableTwo();
+            }
+        });
+
+        updateTableOne();
+        updateTableTwo();
+
+        const assignForm = document.getElementById('assign-form');
+        assignForm.addEventListener('submit', assignBay);
+    </script>
+</body>
+</html>
