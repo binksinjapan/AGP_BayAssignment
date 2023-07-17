@@ -4,7 +4,7 @@ import paho.mqtt.client as mqtt
 app = Flask(__name__)
 
 # MQTT configurations
-MQTT_BROKER = "broker.example.com"
+MQTT_BROKER = "localhost"
 MQTT_TOPIC = "mac_addresses"
 
 # Data storage
